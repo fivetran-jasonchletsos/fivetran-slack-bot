@@ -8,7 +8,8 @@ const {
   getConnector,
   forceSync,
   parseConnectorMapFromEnv,
-  createFivetranClient
+  createFivetranClient,
+  resolveConnectorAlias
 } = require('./fivetran');
 
 const DEFAULT_PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -72,7 +73,6 @@ async function createServer(options = {}) {
   app.command('/fivetran-status', async ({ ack, say, command }) => {
     await ack();
     const text = (command.text || '').trim();
-    const map = parseConnectorMapFromEnv();
 
     try {
       if (!process.env.FIVETRAN_API_KEY || !process.env.FIVETRAN_API_SECRET) {
@@ -93,8 +93,12 @@ async function createServer(options = {}) {
         return;
       }
 
-      const maybeId = map[text] || text;
-      const data = await getConnector(maybeId);
+      const resolved = await resolveConnectorAlias(text);
+      if (!resolved) {
+        await say(`Could not find connector matching: ${text}`);
+        return;
+      }
+      const data = await getConnector(resolved.id);
       await say(formatConnectorStatus(data));
     } catch (err) {
       await say(`Failed to fetch status: ${err.message}`);
@@ -105,7 +109,6 @@ async function createServer(options = {}) {
   app.command('/fivetran-sync', async ({ ack, say, command }) => {
     await ack();
     const text = (command.text || '').trim();
-    const map = parseConnectorMapFromEnv();
 
     if (!text) {
       await say('Usage: /fivetran-sync <connector-id or alias>');
@@ -116,9 +119,13 @@ async function createServer(options = {}) {
         await say('Fivetran credentials are not configured.');
         return;
       }
-      const maybeId = map[text] || text;
-      await forceSync(maybeId);
-      await say(`Triggered sync for connector: ${maybeId}`);
+      const resolved = await resolveConnectorAlias(text);
+      if (!resolved) {
+        await say(`Could not find connector matching: ${text}`);
+        return;
+      }
+      await forceSync(resolved.id);
+      await say(`Triggered sync for connector: ${resolved.id}`);
     } catch (err) {
       await say(`Failed to trigger sync: ${err.message}`);
     }

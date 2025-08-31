@@ -44,13 +44,28 @@ FIVETRAN_CONNECTOR_MAP={"salesforce":"<connector-id>","hubspot":"<connector-id>"
 
 - `FIVETRAN_CONNECTOR_MAP` is optional JSON to map human-friendly names to connector IDs used in slash commands.
 
+Default alias resolution:
+- When you pass a value to commands, the bot will try in order:
+  1) Treat the value as a connector ID
+  2) Match by `schema`
+  3) Match by `service`
+  4) Partial match on `schema` or `service`
+  If a unique match is found, it will use that connector.
+
 ## Slack app setup
 
-- Enable the Events API and set Request URL to your public URL `/slack/events`.
-- Add Slash Commands:
-  - `/fivetran-status` → Request URL: `https://your-url/slack/events`
-  - `/fivetran-sync` → Request URL: `https://your-url/slack/events`
-- Install the app to your workspace and copy the Bot Token.
+- Option A: Use the included manifest
+  1. Go to `https://api.slack.com/apps` → Create New App → From an app manifest
+  2. Paste the JSON from `slack-app-manifest.json`
+  3. Replace `YOUR-PUBLIC-URL` with your ngrok/production URL
+  4. Install the app to your workspace and copy the Bot Token
+
+- Option B: Manual setup
+  - Enable the Events API and set Request URL to your public URL `/slack/events`.
+  - Add Slash Commands:
+    - `/fivetran-status` → Request URL: `https://your-url/slack/events`
+    - `/fivetran-sync` → Request URL: `https://your-url/slack/events`
+  - Install the app to your workspace and copy the Bot Token.
 
 For local development, you can use ngrok:
 
@@ -77,6 +92,10 @@ The tests run the server with Slack disabled using `SKIP_SLACK=1` and validate t
 ## Deployment
 
 See `docs/DEPLOYMENT.md` for production notes.
+
+## References
+
+- Fivetran Connector SDK docs: [Connector SDK - Build Custom Connectors](https://fivetran.com/docs/connector-sdk)
 
 ## License
 
