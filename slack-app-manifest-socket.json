@@ -1,0 +1,26 @@
+{
+  "display_information": {
+    "name": "Fivetran Slack Bot (Socket)",
+    "description": "View connector status and trigger syncs (Socket Mode)"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Fivetran Bot",
+      "always_online": false
+    },
+    "slash_commands": [
+      { "command": "/fivetran-status", "url": "", "description": "Show connector status", "usage_hint": "all | <id|alias>", "should_escape": false },
+      { "command": "/fivetran-sync", "url": "", "description": "Trigger a connector sync", "usage_hint": "<id|alias>", "should_escape": false },
+      { "command": "/fivetran-help", "url": "", "description": "Show help", "usage_hint": "", "should_escape": false }
+    ]
+  },
+  "oauth_config": {
+    "scopes": { "bot": ["commands", "chat:write"] }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true
+  }
+}
+
+

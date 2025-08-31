@@ -68,6 +68,12 @@ Default alias resolution:
     - `/fivetran-sync` → Request URL: `https://your-url/slack/events`
   - Install the app to your workspace and copy the Bot Token.
 
+- Option C: Socket Mode (no public URL)
+  1. Create new app from manifest using `slack-app-manifest-socket.json`
+  2. Enable Socket Mode on the app and generate an App-Level Token with `connections:write`
+  3. Set env vars: `SLACK_SOCKET_MODE=1`, `SLACK_APP_TOKEN=xapp-...`, `SLACK_BOT_TOKEN=xoxb-...`
+  4. Start the app. No ngrok needed.
+
 For local development, you can use ngrok:
 
 ```bash
@@ -108,7 +114,7 @@ See `docs/DEPLOYMENT.md` for production notes.
 3) Start locally
    - `npm install`
    - `npm run validate` (expects real env vars)
-   - `npm start`
+   - `npm start` (in Socket Mode, only tokens are required)
    - `ngrok http 3000` and update Slack URLs if needed
 
 4) Test in Slack

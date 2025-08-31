@@ -36,6 +36,11 @@ function validate() {
   // Slack
   results.push(checkEnvVar('SLACK_SIGNING_SECRET'));
   results.push(checkEnvVar('SLACK_BOT_TOKEN'));
+  const useSocket = (process.env.SLACK_SOCKET_MODE || '').toString().toLowerCase();
+  const socketEnabled = useSocket === '1' || useSocket === 'true';
+  if (socketEnabled) {
+    results.push(checkEnvVar('SLACK_APP_TOKEN', { validator: (v) => v.startsWith('xapp-') }));
+  }
 
   // Fivetran
   results.push(checkEnvVar('FIVETRAN_API_KEY'));

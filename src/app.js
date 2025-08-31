@@ -85,21 +85,35 @@ async function createServer(options = {}) {
     return { expressApp: app, start: (port = DEFAULT_PORT) => app.listen(port) };
   }
 
-  const receiver = new ExpressReceiver({
-    signingSecret: process.env.SLACK_SIGNING_SECRET,
-    endpoints: '/slack/events'
-  });
+  const socketMode = (process.env.SLACK_SOCKET_MODE || '').toString().toLowerCase();
+  const useSocketMode = socketMode === '1' || socketMode === 'true';
 
-  const app = new App({
-    token: process.env.SLACK_BOT_TOKEN,
-    receiver
-  });
+  let receiver;
+  let app;
+  if (useSocketMode) {
+    app = new App({
+      token: process.env.SLACK_BOT_TOKEN,
+      appToken: process.env.SLACK_APP_TOKEN,
+      socketMode: true
+    });
+  } else {
+    receiver = new ExpressReceiver({
+      signingSecret: process.env.SLACK_SIGNING_SECRET,
+      endpoints: '/slack/events'
+    });
+    app = new App({
+      token: process.env.SLACK_BOT_TOKEN,
+      receiver
+    });
+  }
 
   // Health route
-  receiver.app.get('/health', async (req, res) => {
-    const payload = await buildHealthPayload();
-    res.json(payload);
-  });
+  if (receiver) {
+    receiver.app.get('/health', async (req, res) => {
+      const payload = await buildHealthPayload();
+      res.json(payload);
+    });
+  }
 
   // Slash command: /fivetran-status
   app.command('/fivetran-status', async ({ ack, say, respond, command }) => {
@@ -198,11 +212,15 @@ async function createServer(options = {}) {
   });
 
   return {
-    expressApp: receiver.app,
+    expressApp: receiver ? receiver.app : undefined,
     start: async (port = DEFAULT_PORT) => {
-      await app.start(port);
+      if (useSocketMode) {
+        await app.start();
+      } else {
+        await app.start(port);
+      }
       // eslint-disable-next-line no-console
-      console.log(`⚡️ Fivetran Slack Bot is running on port ${port}!`);
+      console.log(`⚡️ Fivetran Slack Bot is running${useSocketMode ? ' (socket mode)' : ` on port ${port}`}!`);
       return app;
     }
   };
