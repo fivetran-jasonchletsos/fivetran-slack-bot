@@ -1,0 +1,38 @@
+{
+  "name": "fivetran-slack-bot",
+  "version": "0.1.0",
+  "description": "Slack bot for managing Fivetran connectors via API",
+  "main": "src/app.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "NODE_ENV=development node src/app.js",
+    "validate": "node src/validate-config.js",
+    "test": "cross-env SKIP_SLACK=1 jest --runInBand"
+  },
+  "keywords": [
+    "slack",
+    "fivetran",
+    "bot",
+    "connector"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@slack/bolt": "^3.17.1",
+    "axios": "^1.7.7",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.4"
+  }
+}
+
+
+
