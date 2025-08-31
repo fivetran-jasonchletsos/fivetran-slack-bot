@@ -23,6 +23,44 @@ function formatConnectorStatus(item) {
   return `• ${c.schema || c.service || c.id}: state=${syncState}, last=${lastSync}, next=${nextSync}`;
 }
 
+function summarizeStatus(item) {
+  const c = item.data || item;
+  const status = c.status || {};
+  const syncState = status.sync_state || status.setup_state || 'unknown';
+  const lastSync = status.historical_sync_completed_at || status.last_sync_started_at || status.last_sync || 'n/a';
+  const nextSync = status.next_sync || 'n/a';
+  return { syncState, lastSync, nextSync };
+}
+
+function isSyncing(statusObj) {
+  const state = (statusObj && statusObj.sync_state) || statusObj || 'unknown';
+  return String(state).toLowerCase() === 'syncing';
+}
+
+async function pollSyncUntilComplete(connectorId, { intervalMs = 10000, timeoutMs = 300000 } = {}, onDone) {
+  const start = Date.now();
+  async function tick() {
+    try {
+      const data = await getConnector(connectorId);
+      const status = (data && data.data && data.data.status) || {};
+      if (!isSyncing(status)) {
+        if (typeof onDone === 'function') onDone(null, data);
+        return;
+      }
+    } catch (err) {
+      if (typeof onDone === 'function') onDone(err);
+      return;
+    }
+
+    if (Date.now() - start >= timeoutMs) {
+      if (typeof onDone === 'function') onDone(new Error('Sync polling timed out'));
+      return;
+    }
+    setTimeout(tick, intervalMs);
+  }
+  setTimeout(tick, intervalMs);
+}
+
 function buildConnectorBlocks(connector) {
   const c = connector.data || connector;
   const status = c.status || {};
@@ -157,7 +195,7 @@ async function createServer(options = {}) {
   });
 
   // Slash command: /fivetran-sync
-  app.command('/fivetran-sync', async ({ ack, say, respond, command }) => {
+  app.command('/fivetran-sync', async ({ ack, say, respond, command, client }) => {
     await ack();
     const text = (command.text || '').trim();
 
@@ -176,7 +214,21 @@ async function createServer(options = {}) {
         return;
       }
       await forceSync(resolved.id);
-      await respond({ response_type: 'ephemeral', text: `Triggered sync for connector: ${resolved.id}` });
+      await respond({ response_type: 'ephemeral', text: `Triggered sync for connector: ${resolved.id}. I will notify you when it completes.` });
+
+      // Poll for completion and notify the user ephemerally
+      pollSyncUntilComplete(resolved.id, {}, async (err, finalData) => {
+        try {
+          if (err) {
+            await client.chat.postEphemeral({ channel: command.channel_id, user: command.user_id, text: `Sync update for ${resolved.id}: ${err.message}` });
+            return;
+          }
+          const { syncState, lastSync, nextSync } = summarizeStatus(finalData);
+          await client.chat.postEphemeral({ channel: command.channel_id, user: command.user_id, text: `Sync complete for ${resolved.id}. state=${syncState}, last=${lastSync}, next=${nextSync}` });
+        } catch (_) {
+          // ignore notification errors
+        }
+      });
     } catch (err) {
       await respond({ response_type: 'ephemeral', text: `Failed to trigger sync: ${err.message}` });
     }
@@ -196,7 +248,7 @@ async function createServer(options = {}) {
   });
 
   // Interactive button: trigger sync
-  app.action('trigger_sync', async ({ ack, respond, action }) => {
+  app.action('trigger_sync', async ({ ack, respond, action, body, client }) => {
     await ack();
     try {
       const connectorId = action && action.value ? action.value : null;
@@ -205,7 +257,25 @@ async function createServer(options = {}) {
         return;
       }
       await forceSync(connectorId);
-      await respond({ response_type: 'ephemeral', text: `Triggered sync for ${connectorId}` });
+      await respond({ response_type: 'ephemeral', text: `Triggered sync for ${connectorId}. I will notify you when it completes.` });
+
+      // Poll for completion and notify the clicker ephemerally
+      const channelId = body && body.channel && body.channel.id ? body.channel.id : undefined;
+      const userId = body && body.user && body.user.id ? body.user.id : undefined;
+      if (channelId && userId) {
+        pollSyncUntilComplete(connectorId, {}, async (err, finalData) => {
+          try {
+            if (err) {
+              await client.chat.postEphemeral({ channel: channelId, user: userId, text: `Sync update for ${connectorId}: ${err.message}` });
+              return;
+            }
+            const { syncState, lastSync, nextSync } = summarizeStatus(finalData);
+            await client.chat.postEphemeral({ channel: channelId, user: userId, text: `Sync complete for ${connectorId}. state=${syncState}, last=${lastSync}, next=${nextSync}` });
+          } catch (_) {
+            // ignore
+          }
+        });
+      }
     } catch (err) {
       await respond({ response_type: 'ephemeral', text: `Failed to trigger sync: ${err.message}` });
     }

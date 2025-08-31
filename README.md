@@ -9,6 +9,7 @@ Slack bot for viewing connector status and triggering syncs via the Fivetran RES
   - `/fivetran-status <connector-id-or-alias>` — show a connector's status
   - `/fivetran-sync <connector-id-or-alias>` — trigger a sync
   - `/fivetran-help` — show usage help
+- Post-sync notification: When you trigger a sync, the bot polls and sends you an ephemeral message when it finishes.
 - Health endpoint at `/health`
 
 ## Requirements
