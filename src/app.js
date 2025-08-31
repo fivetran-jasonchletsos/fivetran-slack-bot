@@ -23,6 +23,38 @@ function formatConnectorStatus(item) {
   return `• ${c.schema || c.service || c.id}: state=${syncState}, last=${lastSync}, next=${nextSync}`;
 }
 
+function buildConnectorBlocks(connector) {
+  const c = connector.data || connector;
+  const status = c.status || {};
+  const syncState = status.sync_state || status.setup_state || 'unknown';
+  const lastSync = status.historical_sync_completed_at || status.last_sync_started_at || status.last_sync || 'n/a';
+  const nextSync = status.next_sync || 'n/a';
+  const stateEmoji = syncState === 'syncing' ? '🔄' : syncState === 'paused' ? '⏸️' : syncState === 'rescheduled' ? '⏭️' : '✅';
+
+  return [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${c.schema || c.service || c.id}* ${stateEmoji}\nID: \`${c.id}\``
+      },
+      fields: [
+        { type: 'mrkdwn', text: `*State*\n${syncState}` },
+        { type: 'mrkdwn', text: `*Service*\n${c.service || 'n/a'}` },
+        { type: 'mrkdwn', text: `*Last*\n${lastSync}` },
+        { type: 'mrkdwn', text: `*Next*\n${nextSync}` }
+      ],
+      accessory: {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Trigger Sync' },
+        action_id: 'trigger_sync',
+        value: c.id
+      }
+    },
+    { type: 'divider' }
+  ];
+}
+
 async function buildHealthPayload() {
   try {
     // Attempt a lightweight Fivetran call if creds exist
@@ -70,13 +102,13 @@ async function createServer(options = {}) {
   });
 
   // Slash command: /fivetran-status
-  app.command('/fivetran-status', async ({ ack, say, command }) => {
+  app.command('/fivetran-status', async ({ ack, say, respond, command }) => {
     await ack();
     const text = (command.text || '').trim();
 
     try {
       if (!process.env.FIVETRAN_API_KEY || !process.env.FIVETRAN_API_SECRET) {
-        await say('Fivetran credentials are not configured.');
+        await respond({ response_type: 'ephemeral', text: 'Fivetran credentials are not configured.' });
         return;
       }
 
@@ -84,50 +116,84 @@ async function createServer(options = {}) {
         const data = await listConnectors({ limit: 100 });
         const items = (data && data.data && Array.isArray(data.data.items)) ? data.data.items : [];
         if (items.length === 0) {
-          await say('No connectors found.');
+          await respond({ response_type: 'ephemeral', text: 'No connectors found.' });
           return;
         }
-        const lines = items.slice(0, 20).map(formatConnectorStatus); // limit to avoid very long messages
-        if (items.length > 20) lines.push(`…and ${items.length - 20} more`);
-        await say(['Fivetran connector statuses:', ...lines].join('\n'));
+        const top = items.slice(0, 10);
+        const blocks = [];
+        for (const c of top) blocks.push(...buildConnectorBlocks(c));
+        if (items.length > top.length) {
+          blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `…and ${items.length - top.length} more` }] });
+        }
+        await respond({ response_type: 'ephemeral', text: 'Fivetran connector statuses:', blocks });
         return;
       }
 
       const resolved = await resolveConnectorAlias(text);
       if (!resolved) {
-        await say(`Could not find connector matching: ${text}`);
+        await respond({ response_type: 'ephemeral', text: `Could not find connector matching: ${text}` });
         return;
       }
       const data = await getConnector(resolved.id);
-      await say(formatConnectorStatus(data));
+      const blocks = buildConnectorBlocks(data);
+      await respond({ response_type: 'ephemeral', text: formatConnectorStatus(data), blocks });
     } catch (err) {
-      await say(`Failed to fetch status: ${err.message}`);
+      await respond({ response_type: 'ephemeral', text: `Failed to fetch status: ${err.message}` });
     }
   });
 
   // Slash command: /fivetran-sync
-  app.command('/fivetran-sync', async ({ ack, say, command }) => {
+  app.command('/fivetran-sync', async ({ ack, say, respond, command }) => {
     await ack();
     const text = (command.text || '').trim();
 
     if (!text) {
-      await say('Usage: /fivetran-sync <connector-id or alias>');
+      await respond({ response_type: 'ephemeral', text: 'Usage: /fivetran-sync <connector-id or alias>' });
       return;
     }
     try {
       if (!process.env.FIVETRAN_API_KEY || !process.env.FIVETRAN_API_SECRET) {
-        await say('Fivetran credentials are not configured.');
+        await respond({ response_type: 'ephemeral', text: 'Fivetran credentials are not configured.' });
         return;
       }
       const resolved = await resolveConnectorAlias(text);
       if (!resolved) {
-        await say(`Could not find connector matching: ${text}`);
+        await respond({ response_type: 'ephemeral', text: `Could not find connector matching: ${text}` });
         return;
       }
       await forceSync(resolved.id);
-      await say(`Triggered sync for connector: ${resolved.id}`);
+      await respond({ response_type: 'ephemeral', text: `Triggered sync for connector: ${resolved.id}` });
     } catch (err) {
-      await say(`Failed to trigger sync: ${err.message}`);
+      await respond({ response_type: 'ephemeral', text: `Failed to trigger sync: ${err.message}` });
+    }
+  });
+
+  // Help command
+  app.command('/fivetran-help', async ({ ack, respond }) => {
+    await ack();
+    const text = [
+      '*Fivetran Slack Bot*',
+      '`/fivetran-status all` – list connectors (top 10) with buttons',
+      '`/fivetran-status <id|schema|service>` – show one connector',
+      '`/fivetran-sync <id|schema|service>` – trigger sync',
+      'Aliases: tries ID, then schema, then service, then partial matches.'
+    ].join('\n');
+    await respond({ response_type: 'ephemeral', text });
+  });
+
+  // Interactive button: trigger sync
+  app.action('trigger_sync', async ({ ack, respond, action }) => {
+    await ack();
+    try {
+      const connectorId = action && action.value ? action.value : null;
+      if (!connectorId) {
+        await respond({ response_type: 'ephemeral', text: 'Missing connector id.' });
+        return;
+      }
+      await forceSync(connectorId);
+      await respond({ response_type: 'ephemeral', text: `Triggered sync for ${connectorId}` });
+    } catch (err) {
+      await respond({ response_type: 'ephemeral', text: `Failed to trigger sync: ${err.message}` });
     }
   });
 

@@ -8,6 +8,7 @@ Slack bot for viewing connector status and triggering syncs via the Fivetran RES
   - `/fivetran-status all` — list up to 20 connector statuses
   - `/fivetran-status <connector-id-or-alias>` — show a connector's status
   - `/fivetran-sync <connector-id-or-alias>` — trigger a sync
+  - `/fivetran-help` — show usage help
 - Health endpoint at `/health`
 
 ## Requirements
@@ -92,6 +93,34 @@ The tests run the server with Slack disabled using `SKIP_SLACK=1` and validate t
 ## Deployment
 
 See `docs/DEPLOYMENT.md` for production notes.
+
+## Step-by-step: Configure and deploy
+
+1) Create Slack app via manifest
+   - Import `slack-app-manifest.json` at `https://api.slack.com/apps`
+   - Replace `YOUR-PUBLIC-URL` with your public URL (ngrok for dev)
+   - Install to workspace; grab `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`
+
+2) Set environment variables
+   - Copy `.env.example` → `.env`, fill in Slack and Fivetran credentials
+   - Optional: set `FIVETRAN_CONNECTOR_MAP` for friendly aliases
+
+3) Start locally
+   - `npm install`
+   - `npm run validate` (expects real env vars)
+   - `npm start`
+   - `ngrok http 3000` and update Slack URLs if needed
+
+4) Test in Slack
+   - `/fivetran-help`
+   - `/fivetran-status all` (click Trigger Sync on a connector)
+   - `/fivetran-status <id|schema|service>`
+   - `/fivetran-sync <id|schema|service>`
+
+5) Deploy
+   - Use any Node 18+ host. Ensure `/slack/events` and `/health` are reachable.
+   - Set the same env vars on the host.
+   - Run `node src/app.js` or `npm start`.
 
 ## References
 
