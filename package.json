@@ -1,0 +1,21 @@
+{
+  "name": "fivetran-slack-bot",
+  "version": "1.0.0",
+  "description": "Slack bot for managing Fivetran connectors via slash commands",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js"
+  },
+  "keywords": ["fivetran", "slack", "bot", "data", "etl"],
+  "author": "Jason Chletsos",
+  "license": "MIT",
+  "dependencies": {
+    "@slack/bolt": "^3.17.1",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
